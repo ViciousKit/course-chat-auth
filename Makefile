@@ -14,7 +14,7 @@ generate:
 
 generate-server-api:
 	mkdir -p generated
-	protoc -I proto proto/chat_auth_v1/chat_auth.proto \
+	protoc -I proto proto/auth_v1/auth.proto \
 	--go_out=./generated \
 	--go_opt=paths=source_relative \
 	--plugin=protoc-gen-go=bin/protoc-gen-go \

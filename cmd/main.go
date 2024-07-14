@@ -6,17 +6,17 @@ import (
 	"log"
 	"net"
 
-	generated "github.com/ViciousKit/course-chat-auth/generated/chat_auth_v1"
+	generated "github.com/ViciousKit/course-chat-auth/generated/auth_v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type srv struct {
-	generated.UnimplementedChatServerV1Server
+	generated.UnimplementedAuthV1Server
 }
 
-var port = 8084
+const port = 8084
 
 func main() {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
@@ -29,7 +29,7 @@ func main() {
 
 	grpcServer := grpc.NewServer()
 	reflection.Register(grpcServer)
-	generated.RegisterChatServerV1Server(grpcServer, api)
+	generated.RegisterAuthV1Server(grpcServer, api)
 
 	if err := grpcServer.Serve(listener); err != nil {
 		log.Fatal(err)
