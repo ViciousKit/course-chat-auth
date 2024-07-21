@@ -1,0 +1,26 @@
+volumes:
+  pg_volume:
+
+
+services:
+  auth_app_dev:
+    profiles:
+      - dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8084:${GRPC_PORT}"
+  pg_dev:
+    image: postgres:14-alpine3.17
+    profiles:
+      - dev
+    environment:
+      - "POSTGRES_DB=${PG_DATABASE_NAME}"
+      - "POSTGRES_USER=${PG_USER}"
+      - "POSTGRES_PASSWORD=${PG_PASSWORD}"
+    ports:
+      - "${PG_PORT}:5432"
+    volumes:
+      - pg_volume:/var/lib/postgresql/data
+
