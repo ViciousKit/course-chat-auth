@@ -20,6 +20,13 @@ type srv struct {
 	Storage *storage.Storage
 }
 
+const (
+	errorMissingArguments    = "missing arguments"
+	errorInternal            = "internal error"
+	errorPasswordDoesntMatch = "password doesn't match"
+	errorMissingEntity       = "missing requested entity"
+)
+
 func main() {
 	cfg := config.LoadConfig()
 	fmt.Printf("%+v\n", cfg)
@@ -46,22 +53,24 @@ func (s *srv) Create(ctx context.Context, req *generated.CreateRequest) (*genera
 	method := "Create"
 
 	if req.Password == "" || req.Name == "" || req.Email == "" || req.PasswordConfirm == "" {
-		return &generated.CreateResponse{}, fmt.Errorf("%s: empty fields", method)
+		return &generated.CreateResponse{}, fmt.Errorf("%s: %s", method, errorMissingArguments)
 	}
 
 	if req.Password != req.PasswordConfirm {
-		return &generated.CreateResponse{}, fmt.Errorf("%s: passwords don't match", method)
+		return &generated.CreateResponse{}, fmt.Errorf("%s: %s", method, errorPasswordDoesntMatch)
 	}
 
 	passHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		fmt.Println(err)
 
-		return &generated.CreateResponse{}, fmt.Errorf("%s: failed generate password hash: %w", method, err)
+		return &generated.CreateResponse{}, fmt.Errorf("%s: %s", method, errorInternal)
 	}
 
 	if err := s.Storage.CreateUser(ctx, req.Name, req.Email, passHash, int(req.Role)); err != nil {
-		return nil, err
+		fmt.Println(err)
+
+		return nil, fmt.Errorf("%s: %s", method, errorInternal)
 	}
 
 	return &generated.CreateResponse{}, nil
@@ -72,7 +81,9 @@ func (s *srv) Get(ctx context.Context, req *generated.GetRequest) (*generated.Ge
 
 	user, err := s.Storage.GetUser(ctx, req.Id)
 	if err != nil {
-		return nil, fmt.Errorf("%s: failed get user by id: %w", method, err)
+		fmt.Println(err)
+
+		return nil, fmt.Errorf("%s: %s", method, errorMissingEntity)
 	}
 
 	return &generated.GetResponse{
@@ -87,11 +98,13 @@ func (s *srv) Update(ctx context.Context, req *generated.UpdateRequest) (*emptyp
 	method := "Update"
 
 	if req.Name == "" || req.Email == "" || req.Role == 0 || req.Id == 0 {
-		return &emptypb.Empty{}, fmt.Errorf("%s: empty fields", method)
+		return &emptypb.Empty{}, fmt.Errorf("%s: %s", method, errorMissingArguments)
 	}
 
 	if err := s.Storage.UpdateUser(ctx, req.Id, req.Name, req.Email, int(req.Role)); err != nil {
-		return nil, fmt.Errorf("%s: failed update user", method)
+		fmt.Println(err)
+
+		return nil, fmt.Errorf("%s: %s", method, errorInternal)
 	}
 
 	return &emptypb.Empty{}, nil
@@ -101,11 +114,13 @@ func (s *srv) Delete(ctx context.Context, req *generated.DeleteRequest) (*emptyp
 	method := "Delete"
 
 	if req.Id == 0 {
-		return &emptypb.Empty{}, fmt.Errorf("%s: empty fields", method)
+		return &emptypb.Empty{}, fmt.Errorf("%s: %s", method, errorMissingArguments)
 	}
 
 	if err := s.Storage.DeleteUser(ctx, req.Id); err != nil {
-		return nil, fmt.Errorf("%s: failed delete user", method)
+		fmt.Println(err)
+
+		return nil, fmt.Errorf("%s: %s", method, errorInternal)
 	}
 
 	return &emptypb.Empty{}, nil
