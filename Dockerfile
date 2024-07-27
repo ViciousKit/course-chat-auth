@@ -6,7 +6,7 @@ WORKDIR /app
 RUN go mod download
 RUN go build -o ./bin/auth_service cmd/main.go
 
-FROM alpine:latest
+FROM alpine:3.20
 
 WORKDIR /root
 

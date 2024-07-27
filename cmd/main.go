@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 	"log"
 	"net"
 
@@ -17,7 +18,7 @@ import (
 
 type srv struct {
 	generated.UnimplementedAuthV1Server
-	Storage *storage.Storage
+	storage *storage.Storage
 }
 
 const (
@@ -29,7 +30,6 @@ const (
 
 func main() {
 	cfg := config.LoadConfig()
-	fmt.Printf("%+v\n", cfg)
 
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.GRPC.Port))
 	if err != nil {
@@ -38,7 +38,8 @@ func main() {
 	fmt.Printf("Started app at port :%d \n", cfg.GRPC.Port)
 
 	api := &srv{}
-	api.Storage = storage.New(cfg.PGUsername, cfg.PGPassword, cfg.PGDatabase, cfg.PGHost, cfg.PGPort)
+	connection := initStorage(cfg.PGUsername, cfg.PGPassword, cfg.PGDatabase, cfg.PGHost, cfg.PGPort)
+	api.storage = storage.New(connection)
 
 	grpcServer := grpc.NewServer()
 	reflection.Register(grpcServer)
@@ -49,41 +50,57 @@ func main() {
 	}
 }
 
-func (s *srv) Create(ctx context.Context, req *generated.CreateRequest) (*generated.CreateResponse, error) {
-	method := "Create"
+func initStorage(user string, password string, dbname string, host string, port int) *pgx.Conn {
+	dsn := fmt.Sprintf("host=%s port=%d user=%s "+
+		"password=%s dbname=%s sslmode=disable",
+		host, port, user, password, dbname)
 
+	conn, err := pgx.Connect(context.Background(), dsn)
+	if err != nil {
+		fmt.Println("Cant connect pg" + err.Error())
+		panic(err)
+	}
+	if err := conn.Ping(context.Background()); err != nil {
+		fmt.Println("Cant ping pg" + err.Error())
+		panic(err)
+	}
+	fmt.Println("Connected!")
+
+	return conn
+}
+
+func (s *srv) Create(ctx context.Context, req *generated.CreateRequest) (*generated.CreateResponse, error) {
 	if req.Password == "" || req.Name == "" || req.Email == "" || req.PasswordConfirm == "" {
-		return &generated.CreateResponse{}, fmt.Errorf("%s: %s", method, errorMissingArguments)
+		return &generated.CreateResponse{}, fmt.Errorf(errorMissingArguments)
 	}
 
 	if req.Password != req.PasswordConfirm {
-		return &generated.CreateResponse{}, fmt.Errorf("%s: %s", method, errorPasswordDoesntMatch)
+		return &generated.CreateResponse{}, fmt.Errorf(errorPasswordDoesntMatch)
 	}
 
 	passHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		fmt.Println(err)
 
-		return &generated.CreateResponse{}, fmt.Errorf("%s: %s", method, errorInternal)
+		return &generated.CreateResponse{}, fmt.Errorf(errorInternal)
 	}
 
-	if err := s.Storage.CreateUser(ctx, req.Name, req.Email, passHash, int(req.Role)); err != nil {
-		fmt.Println(err)
-
-		return nil, fmt.Errorf("%s: %s", method, errorInternal)
-	}
-
-	return &generated.CreateResponse{}, nil
-}
-
-func (s *srv) Get(ctx context.Context, req *generated.GetRequest) (*generated.GetResponse, error) {
-	method := "Get"
-
-	user, err := s.Storage.GetUser(ctx, req.Id)
+	id, err := s.storage.CreateUser(ctx, req.Name, req.Email, passHash, int(req.Role))
 	if err != nil {
 		fmt.Println(err)
 
-		return nil, fmt.Errorf("%s: %s", method, errorMissingEntity)
+		return nil, fmt.Errorf(errorInternal)
+	}
+
+	return &generated.CreateResponse{Id: id}, nil
+}
+
+func (s *srv) Get(ctx context.Context, req *generated.GetRequest) (*generated.GetResponse, error) {
+	user, err := s.storage.GetUser(ctx, req.Id)
+	if err != nil {
+		fmt.Println(err)
+
+		return nil, fmt.Errorf(errorMissingEntity)
 	}
 
 	return &generated.GetResponse{
@@ -95,32 +112,24 @@ func (s *srv) Get(ctx context.Context, req *generated.GetRequest) (*generated.Ge
 }
 
 func (s *srv) Update(ctx context.Context, req *generated.UpdateRequest) (*emptypb.Empty, error) {
-	method := "Update"
-
 	if req.Name == "" || req.Email == "" || req.Role == 0 || req.Id == 0 {
-		return &emptypb.Empty{}, fmt.Errorf("%s: %s", method, errorMissingArguments)
+		return &emptypb.Empty{}, fmt.Errorf(errorMissingArguments)
 	}
 
-	if err := s.Storage.UpdateUser(ctx, req.Id, req.Name, req.Email, int(req.Role)); err != nil {
+	if err := s.storage.UpdateUser(ctx, req.Id, req.Name, req.Email, int(req.Role)); err != nil {
 		fmt.Println(err)
 
-		return nil, fmt.Errorf("%s: %s", method, errorInternal)
+		return nil, fmt.Errorf(errorInternal)
 	}
 
 	return &emptypb.Empty{}, nil
 }
 
 func (s *srv) Delete(ctx context.Context, req *generated.DeleteRequest) (*emptypb.Empty, error) {
-	method := "Delete"
-
-	if req.Id == 0 {
-		return &emptypb.Empty{}, fmt.Errorf("%s: %s", method, errorMissingArguments)
-	}
-
-	if err := s.Storage.DeleteUser(ctx, req.Id); err != nil {
+	if err := s.storage.DeleteUser(ctx, req.Id); err != nil {
 		fmt.Println(err)
 
-		return nil, fmt.Errorf("%s: %s", method, errorInternal)
+		return nil, fmt.Errorf(errorInternal)
 	}
 
 	return &emptypb.Empty{}, nil

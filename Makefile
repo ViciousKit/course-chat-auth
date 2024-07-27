@@ -45,3 +45,7 @@ local-migration-down:
 compose-up-dev:
 	export ENV_FILE=local.env
 	docker compose --profile dev --env-file local.env up -d --build
+
+compose-down-dev:
+	export ENV_FILE=local.env
+	docker compose --profile dev --env-file local.env down

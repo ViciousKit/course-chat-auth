@@ -3,100 +3,62 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
-
-	_ "github.com/lib/pq"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/ViciousKit/course-chat-auth/models"
 )
 
 type Storage struct {
-	db *sql.DB
+	db *pgx.Conn
 }
 
-func New(user string, password string, dbname string, host string, port int) *Storage {
-	dsn := fmt.Sprintf("host=%s port=%d user=%s "+
-		"password=%s dbname=%s sslmode=disable",
-		host, port, user, password, dbname)
-	fmt.Println(dsn)
-	db, err := sql.Open("postgres", dsn)
-	if err != nil {
-		fmt.Println("Cant connect pg" + err.Error())
-		panic(err)
-	}
-	if err := db.Ping(); err != nil {
-		fmt.Println("Cant ping pg" + err.Error())
-		panic(err)
-	}
-	fmt.Println("Connected!")
-
+func New(db *pgx.Conn) *Storage {
 	return &Storage{db: db}
 }
 
-func (s *Storage) CreateUser(ctx context.Context, name string, email string, password []byte, role int) error {
-	method := "CreateUser"
+func (s *Storage) CreateUser(ctx context.Context, name string, email string, password []byte, role int) (int64, error) {
+	row := s.db.QueryRow(ctx, "INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id", name, email, password, role)
 
-	statement, err := s.db.Prepare("INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4)")
+	var id int64
+	err := row.Scan(&id)
 	if err != nil {
-		return fmt.Errorf("%s: %w", method, err)
+		return 0, err
 	}
 
-	_, err = statement.ExecContext(ctx, name, email, password, role)
-	if err != nil {
-		return fmt.Errorf("%s: %w", method, err)
-	}
-
-	return nil
+	return id, nil
 }
 
 func (s *Storage) GetUser(ctx context.Context, id int64) (*models.User, error) {
-	method := "GetUser"
-
-	statement, err := s.db.Prepare("SELECT id, name, email, password, role, created_at, updated_at FROM users WHERE id = $1")
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", method, err)
-	}
+	row := s.db.QueryRow(ctx, "SELECT id, name, email, role, created_at, updated_at FROM users WHERE id = $1", id)
 
 	var user models.User
-	err = statement.QueryRowContext(ctx, id).Scan(&user.Id, &user.Name, &user.Email, &user.Password, &user.Role, &user.CreatedAt, &user.UpdatedAt)
+	err := row.Scan(&user.Id, &user.Name, &user.Email, &user.Role, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return &models.User{}, fmt.Errorf("%s: %s", method, "user not found")
+		if errors.Is(sql.ErrNoRows, err) {
+			return &models.User{}, fmt.Errorf("user with id %d not found", id)
 		}
 
-		return &models.User{}, fmt.Errorf("%s: %w", method, err)
+		return &models.User{}, err
 	}
 
 	return &user, nil
 }
 
 func (s *Storage) UpdateUser(ctx context.Context, id int64, name string, email string, role int) error {
-	method := "UpdateUser"
-
-	statement, err := s.db.Prepare("UPDATE users SET name = $1, email = $2, role = $3, updated_at = NOW() WHERE id = $4")
+	_, err := s.db.Exec(ctx, "UPDATE users SET name = $1, email = $2, role = $3, updated_at = NOW() WHERE id = $4", name, email, role, id)
 	if err != nil {
-		return fmt.Errorf("%s: %w", method, err)
-	}
-
-	_, err = statement.ExecContext(ctx, name, email, role, id)
-	if err != nil {
-		return fmt.Errorf("%s: %w", method, err)
+		return err
 	}
 
 	return nil
 }
 
 func (s *Storage) DeleteUser(ctx context.Context, id int64) error {
-	method := "DeleteUser"
-
-	statement, err := s.db.Prepare("DELETE FROM users WHERE id = $1")
+	_, err := s.db.Exec(ctx, "DELETE FROM users WHERE id = $1", id)
 	if err != nil {
-		return fmt.Errorf("%s: %w", method, err)
-	}
-
-	_, err = statement.ExecContext(ctx, id)
-	if err != nil {
-		return fmt.Errorf("%s: %w", method, err)
+		return err
 	}
 
 	return nil
