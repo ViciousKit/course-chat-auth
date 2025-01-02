@@ -1,26 +1,84 @@
 volumes:
   pg_volume:
+  pg_auth_volume_local:
 
 
 services:
-  auth_app_dev:
-    profiles:
-      - dev
-    build:
-      context: .
-      dockerfile: Dockerfile
-    ports:
-      - "8084:${GRPC_PORT}"
-  pg_dev:
+  pg_auth_dev:
     image: postgres:14-alpine3.17
+    container_name: pg_auth_dev
     profiles:
       - dev
+    env_file:
+      - dev.env
     environment:
       - "POSTGRES_DB=${PG_DATABASE_NAME}"
       - "POSTGRES_USER=${PG_USER}"
       - "POSTGRES_PASSWORD=${PG_PASSWORD}"
     ports:
-      - "${PG_PORT}:5432"
+      - "${PG_PORT_OUTER}:5432"
     volumes:
       - pg_volume:/var/lib/postgresql/data
+
+  auth_app_dev:
+    image: ${IMAGE}
+    container_name: ${CONTAINER_NAME}
+    depends_on:
+      - pg_auth_dev
+    profiles:
+      - dev
+    env_file:
+      - dev.env
+    environment:
+      - "CONFIG_FILE=local.env"
+    ports:
+      - "8084:${GRPC_PORT}"
+
+
+  auth_app_local:
+    depends_on:
+      - pg_auth_local
+    profiles:
+      - local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - local.env
+    environment:
+      - "CONFIG_FILE=local.env"
+    ports:
+      - "8084:${GRPC_PORT}"
+
+  pg_auth_local:
+    image: postgres:14-alpine3.17
+    container_name: pg_auth_local
+    profiles:
+      - local
+    env_file:
+      - local.env
+    environment:
+      - "POSTGRES_DB=${PG_DATABASE_NAME}"
+      - "POSTGRES_USER=${PG_USER}"
+      - "POSTGRES_PASSWORD=${PG_PASSWORD}"
+    ports:
+      - "${PG_PORT_OUTER}:5432"
+    volumes:
+      - pg_auth_volume_local:/var/lib/postgresql/data
+
+
+  pg_auth_test:
+    image: postgres:14-alpine3.17
+    profiles:
+      - test
+    env_file:
+      - test.env
+    environment:
+      - "POSTGRES_DB=${PG_DATABASE_NAME}"
+      - "POSTGRES_USER=${PG_USER}"
+      - "POSTGRES_PASSWORD=${PG_PASSWORD}"
+    ports:
+      - "${PG_PORT_OUTER}:5432"
+    volumes:
+      - pg_auth_volume_local:/var/lib/postgresql/data
 
