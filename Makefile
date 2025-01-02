@@ -2,8 +2,8 @@ include local.env
 
 LOCAL_BIN:=$(CURDIR)/bin
 
-LOCAL_MIGRATAION_DIR:=$(MIGRATION_DIR)
-LOCAL_MIGRATION_DSN:="host=localhost user=$(PG_USER) password=$(PG_PASSWORD) dbname=$(PG_DATABASE_NAME) port=$(PG_PORT)"
+LOCAL_MIGRATION_DIR:=$(MIGRATION_DIR)
+LOCAL_MIGRATION_DSN:="host=localhost user=$(PG_USER) password=$(PG_PASSWORD) dbname=$(PG_DATABASE_NAME) port=$(PG_PORT_OUTER) sslmode=disable"
 
 install-deps:
 	GOBIN=$(LOCAL_BIN) go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.28.1
@@ -34,18 +34,22 @@ docker-build:
 	docker buildx build --no-cache --platform linux/amd64 -t auth_service:v0.0.1
 
 local-migration-status:
-	bin/goose -dir $(LOCAL_MIGRATAION_DIR) postgres $(LOCAL_MIGRATION_DSN) status -v
+	bin/goose -dir $(LOCAL_MIGRATION_DIR) postgres $(LOCAL_MIGRATION_DSN) status -v
 
 local-migration-up:
-	bin/goose -dir $(LOCAL_MIGRATAION_DIR) postgres $(LOCAL_MIGRATION_DSN) up -v
+	bin/goose -dir $(LOCAL_MIGRATION_DIR) postgres $(LOCAL_MIGRATION_DSN) up -v
 
 local-migration-down:
-	bin/goose -dir $(LOCAL_MIGRATAION_DIR) postgres $(LOCAL_MIGRATION_DSN) down -v
+	bin/goose -dir $(LOCAL_MIGRATION_DIR) postgres $(LOCAL_MIGRATION_DSN) down -v
 
-compose-up-dev:
-	export ENV_FILE=local.env
-	docker compose --profile dev --env-file local.env up -d --build
+compose-up-local:
+	docker compose --profile local --env-file local.env up -d --build --remove-orphans
 
-compose-down-dev:
-	export ENV_FILE=local.env
-	docker compose --profile dev --env-file local.env down
+compose-down-local:
+	docker compose --profile local --env-file local.env down
+
+compose-up-db:
+	docker compose --env-file test.env up -d --build pg_auth_test --remove-orphans
+
+compose-down-db:
+	docker compose --env-file test.env down pg_auth_test
