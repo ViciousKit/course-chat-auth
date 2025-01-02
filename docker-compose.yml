@@ -30,7 +30,7 @@ services:
     env_file:
       - dev.env
     environment:
-      - "CONFIG_FILE=local.env"
+      - "CONFIG_FILE=dev.env"
     ports:
       - "8084:${GRPC_PORT}"
 
